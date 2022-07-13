@@ -47,7 +47,7 @@ params:
 
   theme:
     disableThemeToggle: false
-    defaultTheme: "light" # dark
+    defaultTheme: "dark" # light
 
   # font:
   #   fontSize: 1.5rem # default: 1rem
@@ -212,15 +212,6 @@ params:
           Extracurricular Activities
             - Head of Robotics Club for 3 years, Published 2 papers and conducted various events.
             - Completed industrial robotics projects work with various industries
-    
-      - title: "High School"
-        school:
-          name: "Pragati Vidhya Peeth School"
-          url: "https://example.org"
-        GPA: "70%"
-        featuredLink:
-          enable: false
-          url: "https://example.com"
 
   # Achievements
   achievements:
