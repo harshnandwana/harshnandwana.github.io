@@ -1,292 +1,492 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8" />
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web AR Machine Viewer</title>
-    <!-- A-Frame and AR.js for WebAR -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v7.2.0/dist/aframe-extras.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     
-    <!-- Tailwind CSS for styling -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
     
-    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
 
     <style>
-        body {
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
             font-family: 'Inter', sans-serif;
         }
-        /* Hide the default A-Frame canvas until everything is ready */
-        .a-canvas {
-            display: none;
-            position: fixed !important;
+
+        #ar-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #e8e8e8;
         }
-        .ar-cursor {
-            transition: transform 0.3s ease-in-out;
+
+        model-viewer {
+            width: 100%;
+            height: 100%;
+            --poster-color: #f0f2f5;
+            /* Style the default placement ring to be more prominent */
+            --ar-tracking-reticle-color1: rgba(255, 255, 255, 0.8);
+            --ar-tracking-reticle-color2: white;
         }
-        .control-chip.active {
+        
+        /* Hide model content until placed in AR */
+        model-viewer[ar-status="session-started"]:not([data-placed]) .model-viewer-render-canvas {
+            opacity: 0;
+        }
+
+        #ar-button {
+            background-color: #007aff;
+            border-radius: 30px;
+            border: none;
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 18px;
+            font-weight: 700;
+            padding: 15px 30px;
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #ar-button:hover {
+            background-color: #0066d6;
+            box-shadow: 0 6px 16px rgba(0, 122, 255, 0.5);
+        }
+
+        #loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            text-align: center;
+        }
+        
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.2);
+            border-radius: 50%;
+            border-top: 4px solid #333;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #loading-overlay p {
+            margin-top: 20px;
+            font-size: 18px;
+            font-weight: 500;
+            color: #333;
+        }
+        
+        #ar-instructions {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
             background-color: white;
             color: black;
+            padding: 15px 30px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+            max-width: 80%;
         }
-         .control-chip.active .chip-text {
-            color: black;
+
+        #ar-instructions.visible {
+            opacity: 1;
         }
+
+        /* Updated dimensions overlay for better visibility */
+        #dimensions-overlay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 12px;
+            padding: 15px 20px;
+            font-size: 16px;
+            font-weight: 600;
+            z-index: 5;
+            display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+        }
+
+        #dimensions-overlay.visible {
+            display: block;
+        }
+
+        #dimensions-overlay h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #fff;
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            padding-bottom: 8px;
+        }
+
+        #dimensions-overlay div {
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #dimensions-overlay .label {
+            color: #bbb;
+            margin-right: 15px;
+        }
+
+        #dimensions-overlay .value {
+            color: #fff;
+            font-weight: 700;
+        }
+
+        #error-message {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 400px;
+            color: #d32f2f;
+            font-weight: 500;
+            text-align: center;
+            padding: 15px;
+            background-color: #ffebee;
+            border: 1px solid #d32f2f;
+            border-radius: 8px;
+            z-index: 20;
+        }
+
+        /* Debug info panel */
+        #debug-info {
+            position: absolute;
+            bottom: 100px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            max-width: 300px;
+            z-index: 10;
+        }
+
+        #debug-info.visible {
+            display: block;
+        }
+
     </style>
 </head>
+<body>
 
-<body class="bg-black overflow-hidden">
-
-    <!-- Start Screen -->
-    <div id="start-screen" class="absolute inset-0 bg-gray-900 flex flex-col justify-center items-center z-20">
-        <div class="text-center p-8 max-w-md">
-            <h1 class="text-3xl font-bold text-white mb-4">Web AR Viewer</h1>
-            <p class="text-gray-400 mb-8">Enter the URL of a .GLB or .GLTF model to view it in Augmented Reality.</p>
-            <input id="model-url-input" type="url" placeholder="Enter model URL" class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" value="https://cdn.glitch.global/e5fe7f62-2c6c-4f1c-9243-851421b34a04/robot_playground.glb?v=1718991730419">
-            <button id="start-ar-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">Start AR Session</button>
-        </div>
-    </div>
-
-    <a-scene
-        id="ar-scene"
-        vr-mode-ui="enabled: false"
-        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"
-        renderer="antialias: true; alpha: true"
-        gesture-detector
-    >
-        <!-- a-assets are not used for the dynamic model anymore -->
-        <a-assets></a-assets>
-
-        <!-- AR Camera and Cursor -->
-        <a-camera gps-new-camera='gpsMinDistance: 5' look-controls="enabled: false" arjs-look-controls='smoothingFactor: 0.1'></a-camera>
-
-        <!-- The 3D Machine Model -->
-        <a-entity
-            id="model-container"
-            visible="false"
-            scale="0.05 0.05 0.05" 
-            rotation="0 0 0"
-        >
-            <!-- The src attribute will be set dynamically by our script -->
-            <a-gltf-model id="model" src="" position="0 0 0"></a-gltf-model>
-            
-            <!-- Measurement visualizations, initially hidden -->
-            <a-entity id="measurements" visible="false">
-                 <!-- Using placeholder dimensions -->
-                <a-text value="H: 1.80m" position="15 20 0" align="center" color="white" width="60"></a-text>
-                <a-text value="W: 1.20m" position="0 40 0" align="center" color="white" width="60"></a-text>
-                <a-text value="L: 0.80m" position="0 20 -12" align="center" color="white" width="60"></a-text>
-            </a-entity>
-        </a-entity>
-
-        <!-- Ground plane reticle/cursor -->
-        <a-entity id="reticle"
-            visible="false"
-            geometry="primitive: ring; radiusInner: 0.1; radiusOuter: 0.15;"
-            material="color: white; shader: flat; opacity: 0.8;"
-            rotation="-90 0 0"
-            class="ar-cursor"
-            animation__scale="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 700; loop: true; easing: easeInOutSine;"
-        >
-        </a-entity>
-    </a-scene>
-
-    <!-- UI Overlay -->
-    <div id="ui-overlay" class="absolute inset-0 flex-col justify-between p-4 text-white z-10 pointer-events-none hidden">
+    <div id="ar-container">
         
-        <!-- Header -->
-        <div class="flex justify-between items-center pt-4 px-2 pointer-events-auto">
-            <button id="back-button" class="p-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-            </button>
-            <div id="status-box" class="flex items-center bg-black/50 rounded-full px-4 py-2">
-                <div id="loader" class="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
-                <span id="status-text" class="font-bold">Downloading Machine...</span>
-            </div>
-            <button id="reset-button" class="p-2">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/></svg>
-            </button>
-        </div>
-
-        <!-- Footer -->
-        <div class="w-full flex justify-center pb-8 pointer-events-auto">
-            <!-- Tap to Place Button -->
-            <button id="place-button" class="bg-white text-black font-bold py-4 px-10 rounded-full shadow-lg transform transition-transform duration-300 scale-0 disabled:bg-gray-400">
-                Tap to Place
+        <!-- Updated model-viewer with better AR settings -->
+        <model-viewer
+            id="machine-viewer"
+            src="" 
+            crossorigin="anonymous"
+            ar
+            ar-placement="floor"
+            ar-modes="webxr scene-viewer quick-look"
+            camera-controls
+            auto-rotate
+            shadow-intensity="1"
+            touch-action="pan-y"
+            alt="A 3D model of a machine"
+            min-camera-orbit="auto auto 0.5m"
+            max-camera-orbit="auto auto 5m"
+            camera-orbit="45deg 75deg 2m"
+        >
+            <button slot="ar-button" id="ar-button">
+                View in your space
             </button>
             
-            <!-- Placed Controls -->
-            <div id="placed-controls" class="hidden items-center space-x-4">
-                <button id="measure-button" class="control-chip flex items-center bg-black/60 border border-white/30 rounded-full px-5 py-2.5 transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 6H3"/><path d="M21 12H3"/><path d="M21 18H3"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
-                    <span class="chip-text ml-2 font-semibold">Measure</span>
-                </button>
+            <div id="loading-overlay" slot="poster">
+                <div class="spinner"></div>
+                <p>Loading 3D Viewer...</p>
+            </div>
+        </model-viewer>
+        
+        <div id="ar-instructions"></div>
+        <div id="dimensions-overlay">
+            <h3>Dimensions</h3>
+            <div>
+                <span class="label">Length:</span>
+                <span class="value" id="dim-length">-</span>
+            </div>
+            <div>
+                <span class="label">Breadth:</span>
+                <span class="value" id="dim-breadth">-</span>
+            </div>
+            <div>
+                <span class="label">Height:</span>
+                <span class="value" id="dim-height">-</span>
             </div>
         </div>
+        <div id="error-message" style="display: none;"></div>
+        <div id="debug-info"></div>
     </div>
 
     <script>
-        window.addEventListener('load', () => {
-            // UI elements
-            const startScreen = document.getElementById('start-screen');
-            const startButton = document.getElementById('start-ar-button');
-            const modelUrlInput = document.getElementById('model-url-input');
+        document.addEventListener('DOMContentLoaded', () => {
+            const modelViewer = document.getElementById('machine-viewer');
+            const arInstructions = document.getElementById('ar-instructions');
+            const dimensionsOverlay = document.getElementById('dimensions-overlay');
+            const errorMessage = document.getElementById('error-message');
+            const debugInfo = document.getElementById('debug-info');
             
-            const uiOverlay = document.getElementById('ui-overlay');
-            const statusText = document.getElementById('status-text');
-            const loader = document.getElementById('loader');
-            const placeButton = document.getElementById('place-button');
-            const resetButton = document.getElementById('reset-button');
-            const measureButton = document.getElementById('measure-button');
-            const placedControls = document.getElementById('placed-controls');
-            const backButton = document.getElementById('back-button');
+            let modelDimensions = null;
+            let originalScale = null;
+            let placementCount = 0;
 
-            // A-Frame elements
-            const sceneEl = document.querySelector('#ar-scene');
-            const modelEl = document.getElementById('model');
-            const modelContainer = document.getElementById('model-container');
-            const measurements = document.getElementById('measurements');
-            const reticle = document.getElementById('reticle');
+            // Enable debug mode with ?debug=true
+            const urlParams = new URLSearchParams(window.location.search);
+            const debugMode = urlParams.get('debug') === 'true';
+            if (debugMode) {
+                debugInfo.classList.add('visible');
+            }
 
-            let isModelDownloaded = false;
-            let isGroundDetected = false;
-            let isModelPlaced = false;
+            const updateDebugInfo = (info) => {
+                if (debugMode) {
+                    debugInfo.innerHTML = info;
+                }
+            };
 
-            // --- State Update Function ---
-            function updateUI() {
-                if (!isModelDownloaded) {
-                    statusText.textContent = 'Downloading Machine...';
-                    loader.style.display = 'block';
-                    placeButton.disabled = true;
-                    placeButton.style.transform = 'scale(0)';
-                } else if (!isGroundDetected) {
-                    statusText.textContent = 'Point camera at a surface...';
-                    loader.style.display = 'block';
-                    placeButton.disabled = true;
-                    placeButton.style.transform = 'scale(0)';
-                } else if (!isModelPlaced) {
-                    statusText.textContent = 'Surface found. Ready to place.';
-                    loader.style.display = 'none';
-                    placeButton.disabled = false;
-                    placeButton.style.transform = 'scale(1)';
-                    placedControls.classList.add('hidden');
+            const getQueryParam = (name) => {
+                const params = new URLSearchParams(window.location.search);
+                return params.get(name) ? decodeURIComponent(params.get(name)) : null;
+            };
+
+            const glbModelUrl = getQueryParam('modelUrl');
+            
+            // Model URL Validation
+            if (!glbModelUrl) {
+                document.getElementById('loading-overlay').style.display = 'none';
+                errorMessage.textContent = "Error: A 'modelUrl' parameter for the GLB file is required.";
+                errorMessage.style.display = 'block';
+                return;
+            }
+
+            modelViewer.src = glbModelUrl;
+
+            // Detect platform
+            const userAgent = navigator.userAgent.toLowerCase();
+            const isIOS = /ipad|iphone|ipod/.test(userAgent) && !window.MSStream;
+            const isAndroid = /android/.test(userAgent);
+            const platform = isIOS ? 'iOS' : (isAndroid ? 'Android' : 'Other');
+            
+            // Update dimensions display
+            const updateDimensionsDisplay = (scale = 1) => {
+                if (modelDimensions) {
+                    document.getElementById('dim-length').textContent = `${(modelDimensions.depth * scale * 100).toFixed(1)} cm`;
+                    document.getElementById('dim-breadth').textContent = `${(modelDimensions.width * scale * 100).toFixed(1)} cm`;
+                    document.getElementById('dim-height').textContent = `${(modelDimensions.height * scale * 100).toFixed(1)} cm`;
+                    dimensionsOverlay.classList.add('visible');
+                }
+            };
+            
+            // When the model is loaded, get its dimensions and set appropriate scale
+            modelViewer.addEventListener('load', () => {
+                try {
+                    const size = modelViewer.getDimensions();
+                    modelDimensions = {
+                        width: size.x,
+                        height: size.y,
+                        depth: size.z,
+                    };
+                    
+                    // Calculate the largest dimension
+                    const maxDimension = Math.max(size.x, size.y, size.z);
+                    
+                    // Set initial scale based on model size
+                    // Target size: 0.5 to 2 meters for optimal viewing
+                    let targetScale = 1;
+                    if (maxDimension > 2) {
+                        targetScale = 1.5 / maxDimension;
+                    } else if (maxDimension < 0.5) {
+                        targetScale = 0.75 / maxDimension;
+                    }
+                    
+                    // Apply platform-specific scale adjustments
+                    if (isIOS) {
+                        // iOS tends to render larger, so reduce scale
+                        targetScale *= 0.6;
+                    } else if (isAndroid) {
+                        // Android tends to render smaller, so increase scale
+                        targetScale *= 1.2;
+                    }
+                    
+                    originalScale = targetScale;
+                    modelViewer.scale = `${targetScale} ${targetScale} ${targetScale}`;
+                    
+                    // Show dimensions in preview mode
+                    updateDimensionsDisplay(targetScale);
+                    
+                    // Debug information
+                    const debugText = `
+Platform: ${platform}<br>
+Model dimensions (m):<br>
+- Width: ${size.x.toFixed(3)}<br>
+- Height: ${size.y.toFixed(3)}<br>
+- Depth: ${size.z.toFixed(3)}<br>
+Max dimension: ${maxDimension.toFixed(3)}m<br>
+Applied scale: ${targetScale.toFixed(3)}<br>
+Final size (cm):<br>
+- Width: ${(size.x * targetScale * 100).toFixed(1)}<br>
+- Height: ${(size.y * targetScale * 100).toFixed(1)}<br>
+- Depth: ${(size.z * targetScale * 100).toFixed(1)}
+                    `;
+                    updateDebugInfo(debugText);
+                    
+                    console.log('Model loaded:', {
+                        dimensions: modelDimensions,
+                        scale: targetScale,
+                        platform: platform
+                    });
+                    
+                } catch (e) {
+                    console.error("Could not get model dimensions:", e);
+                    errorMessage.textContent = "Warning: Could not calculate model dimensions";
+                    errorMessage.style.display = 'block';
+                }
+            });
+
+            // AR Session Logic
+            modelViewer.addEventListener('ar-status', (event) => {
+                if (event.detail.status === 'session-started') {
+                    // Disable 3D controls when entering AR
+                    modelViewer.removeAttribute('camera-controls');
+                    modelViewer.removeAttribute('auto-rotate');
+                    
+                    // Hide dimensions overlay in AR mode initially
+                    dimensionsOverlay.classList.remove('visible');
+                    
+                    // Reset placement status
+                    modelViewer.removeAttribute('data-placed');
+                    placementCount = 0;
+                    
+                    // Show appropriate instructions
+                    arInstructions.textContent = 'Move your phone to scan the floor, then tap to place';
+                    arInstructions.classList.add('visible');
+                    
+                    // Apply AR-specific scale adjustments if needed
+                    if (originalScale) {
+                        let arScale = originalScale;
+                        
+                        // Additional AR-specific adjustments
+                        if (isIOS) {
+                            // iOS AR Quick Look sometimes needs different scaling
+                            arScale *= 0.8;
+                        }
+                        
+                        modelViewer.scale = `${arScale} ${arScale} ${arScale}`;
+                        
+                        updateDebugInfo(`AR Mode Active<br>Platform: ${platform}<br>AR Scale: ${arScale.toFixed(3)}`);
+                    }
+                    
+                } else if (event.detail.status === 'not-presenting') {
+                    // Re-enable 3D controls when exiting AR
+                    modelViewer.setAttribute('camera-controls', '');
+                    modelViewer.setAttribute('auto-rotate', '');
+                    arInstructions.classList.remove('visible');
+                    
+                    // Reset to original scale and show dimensions
+                    if (originalScale) {
+                        modelViewer.scale = `${originalScale} ${originalScale} ${originalScale}`;
+                        updateDimensionsDisplay(originalScale);
+                    }
+                }
+            });
+
+            // Handle AR tracking state
+            modelViewer.addEventListener('ar-tracking', (event) => {
+                if (event.detail.state === 'tracking') {
+                    // Surface detected
+                    if (placementCount === 0 && !modelViewer.hasAttribute('data-placed')) {
+                        arInstructions.textContent = 'Tap to place the model on the floor';
+                    }
                 } else {
-                    statusText.textContent = 'Machine Placed';
-                    loader.style.display = 'none';
-                    placeButton.style.transform = 'scale(0)';
-                    placedControls.classList.remove('hidden');
-                }
-            }
-
-            // --- Set up event listeners once ---
-            
-            // Listen for the actual model load event
-            modelEl.addEventListener('model-loaded', () => {
-                isModelDownloaded = true;
-                updateUI();
-            });
-
-            // Listen for model loading errors
-            modelEl.addEventListener('model-error', (e) => {
-                statusText.textContent = 'Error: Could not load model.';
-                loader.style.display = 'none';
-                console.error("Model Error:", e.detail);
-            });
-            
-            sceneEl.addEventListener('ar-ready', () => {
-                document.querySelector('.a-canvas').style.display = 'block';
-            });
-            
-            sceneEl.addEventListener('ar-hit-test-start', () => {
-                if (!isModelDownloaded) return; // Don't detect ground until model is ready
-                if (!isGroundDetected) {
-                    isGroundDetected = true;
-                    reticle.setAttribute('visible', true);
-                    updateUI();
+                    // No surface detected
+                    arInstructions.textContent = 'Move your phone to scan the floor';
                 }
             });
 
-            sceneEl.addEventListener('ar-hit-test-achieved', (e) => {
-                const hitPosition = e.detail.position;
-                reticle.setAttribute('position', hitPosition);
-            });
-
-            // --- Control Button Logic ---
-
-            function initializeAR() {
-                // Reset states and update UI to show "Downloading..."
-                isModelDownloaded = false;
-                isGroundDetected = false;
-                isModelPlaced = false;
-                updateUI();
-            }
-            
-            startButton.addEventListener('click', () => {
-                const modelUrl = modelUrlInput.value;
-                if (!modelUrl) {
-                    alert('Please enter a valid model URL.');
+            // Placement Logic
+            modelViewer.addEventListener('click', (event) => {
+                if (modelViewer.arStatus !== 'session-started' || modelViewer.hasAttribute('data-placed')) {
                     return;
                 }
                 
-                initializeAR();
-
-                // Set model source directly on the gltf-model component to trigger the download
-                modelEl.setAttribute('gltf-model', `url(${modelUrl})`);
-
-                // Hide start screen and show AR UI
-                startScreen.style.display = 'none';
-                uiOverlay.classList.remove('hidden');
-                uiOverlay.classList.add('flex');
+                // Place the model
+                setTimeout(() => {
+                    modelViewer.setAttribute('data-placed', 'true');
+                    placementCount++;
+                    
+                    // Update instructions
+                    arInstructions.textContent = 'Model placed! Move around to view from different angles';
+                    
+                    // Show dimensions after placement
+                    const currentScale = parseFloat(modelViewer.scale.split(' ')[0]) || 1;
+                    updateDimensionsDisplay(currentScale);
+                    
+                    // Hide instructions after a delay
+                    setTimeout(() => {
+                        arInstructions.classList.remove('visible');
+                    }, 3000);
+                    
+                }, 100);
             });
-
-            placeButton.addEventListener('click', () => {
-                if(isGroundDetected && !isModelPlaced) {
-                    const reticlePosition = reticle.getAttribute('position');
-                    modelContainer.setAttribute('position', `${reticlePosition.x} ${reticlePosition.y} ${reticlePosition.z}`);
-                    modelContainer.setAttribute('visible', true);
-                    reticle.setAttribute('visible', false);
-                    isModelPlaced = true;
-                    updateUI();
-                }
+            
+            // Error handling
+            modelViewer.addEventListener('error', (event) => {
+                document.getElementById('loading-overlay').style.display = 'none';
+                errorMessage.textContent = `Error: Failed to load 3D model. Check URL, CORS settings, and ensure you are online.`;
+                errorMessage.style.display = 'block';
+                console.error('Model loading error:', event.detail);
             });
-
-            function resetScene() {
-                modelContainer.setAttribute('visible', false);
-                measurements.setAttribute('visible', false);
-                measureButton.classList.remove('active');
-                
-                if (isGroundDetected) {
-                    reticle.setAttribute('visible', true);
-                }
-                isModelPlaced = false;
-            }
-
-            resetButton.addEventListener('click', () => {
-                resetScene();
-                initializeAR();
-                // Re-trigger download
-                modelEl.setAttribute('gltf-model', `url(${modelUrlInput.value})`);
-            });
-
-            backButton.addEventListener('click', () => {
-                uiOverlay.classList.add('hidden');
-                uiOverlay.classList.remove('flex');
-                startScreen.style.display = 'flex';
-                resetScene();
-                // Clear the model src to stop any loading
-                modelEl.setAttribute('gltf-model', '');
-            });
-
-            measureButton.addEventListener('click', () => {
-                const isVisible = measurements.getAttribute('visible');
-                measurements.setAttribute('visible', !isVisible);
-                measureButton.classList.toggle('active');
+            
+            // Scene viewer specific handling for Android
+            modelViewer.addEventListener('scene-viewer-ready', () => {
+                console.log('Scene Viewer is ready');
+                updateDebugInfo('Scene Viewer Ready (Android)');
             });
         });
     </script>
+
 </body>
 </html>
