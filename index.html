@@ -149,7 +149,6 @@
         <model-viewer
             id="machine-viewer"
             src="" 
-            ios-src=""
             crossorigin="anonymous"
             ar
             ar-placement="floor"
@@ -189,8 +188,6 @@
             };
 
             const glbModelUrl = getQueryParam('modelUrl');
-            const usdzModelUrl = getQueryParam('iosModelUrl');
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             
             // --- Model URL Validation ---
             if (!glbModelUrl) {
@@ -199,18 +196,8 @@
                 errorMessage.style.display = 'block';
                 return;
             }
-            
-            if (isIOS && !usdzModelUrl) {
-                document.getElementById('loading-overlay').style.display = 'none';
-                errorMessage.textContent = "Error: On an iOS device, an 'iosModelUrl' parameter for a USDZ file is required for a stable experience.";
-                errorMessage.style.display = 'block';
-                return;
-            }
 
             modelViewer.src = glbModelUrl;
-            if (usdzModelUrl) {
-                modelViewer.iosSrc = usdzModelUrl;
-            }
 
             // --- AR Session Logic ---
             modelViewer.addEventListener('ar-status', (event) => {
