@@ -144,8 +144,7 @@
         
         <!--
             - We added `shadow-intensity="1"` to enable real-time shadows.
-            - We added `auto-rotate` to help the viewer calculate the model's bounds.
-            - The rest of the stable placement logic remains.
+            - We will dynamically manage `camera-controls` and `auto-rotate`.
         -->
         <model-viewer
             id="machine-viewer"
@@ -191,10 +190,19 @@
 
             const glbModelUrl = getQueryParam('modelUrl');
             const usdzModelUrl = getQueryParam('iosModelUrl');
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
             
+            // --- Model URL Validation ---
             if (!glbModelUrl) {
                 document.getElementById('loading-overlay').style.display = 'none';
-                errorMessage.textContent = "Error: A 'modelUrl' parameter is required.";
+                errorMessage.textContent = "Error: A 'modelUrl' parameter for the GLB file is required.";
+                errorMessage.style.display = 'block';
+                return;
+            }
+            
+            if (isIOS && !usdzModelUrl) {
+                document.getElementById('loading-overlay').style.display = 'none';
+                errorMessage.textContent = "Error: On an iOS device, an 'iosModelUrl' parameter for a USDZ file is required for a stable experience.";
                 errorMessage.style.display = 'block';
                 return;
             }
@@ -207,14 +215,19 @@
             // --- AR Session Logic ---
             modelViewer.addEventListener('ar-status', (event) => {
                 if (event.detail.status === 'session-started') {
+                    // Disable 3D controls when entering AR for a cleaner experience
+                    modelViewer.removeAttribute('camera-controls');
+                    modelViewer.removeAttribute('auto-rotate');
+
                     // Reset placement status when a new session starts
                     modelViewer.removeAttribute('data-placed');
                     
                     arInstructions.textContent = 'Move your phone around to find a flat surface on the floor';
                     arInstructions.classList.add('visible');
-                    
-                    // The default reticle will now show automatically on the floor.
                 } else if (event.detail.status === 'not-presenting') {
+                    // Re-enable 3D controls when exiting AR
+                    modelViewer.setAttribute('camera-controls', '');
+                    modelViewer.setAttribute('auto-rotate', '');
                     arInstructions.classList.remove('visible');
                 }
             });
