@@ -34,8 +34,6 @@
             width: 100%;
             height: 100%;
             --poster-color: #f0f2f5;
-            /* This custom property styles the default placement ring (reticle) */
-            --ar-tracking-reticle-color: white; 
         }
         
         #ar-button {
@@ -90,10 +88,6 @@
             color: #333;
         }
         
-        /*
-          This new overlay provides instructions during the AR session.
-          It's styled to look like the "Tap to place" button from your images.
-        */
         #ar-instructions {
             position: absolute;
             bottom: 30px;
@@ -115,6 +109,33 @@
 
         #ar-instructions.visible {
             opacity: 1;
+        }
+        
+        #placement-marker {
+            position: absolute;
+            width: 150px;
+            height: 150px;
+            border: 4px solid white;
+            border-radius: 8px;
+            background-color: rgba(255, 255, 255, 0.2);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+            /* Make sure the marker is transformed correctly */
+            transform: translate(-50%, -50%);
+        }
+        
+        #placement-marker.visible {
+            display: flex;
+        }
+        
+        #placement-marker::before {
+            content: '';
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: white;
         }
 
         #error-message {
@@ -140,10 +161,10 @@
 
     <div id="ar-container">
         
-        <!-- 
-          The key change here is ar-placement="floor".
-          This tells model-viewer to wait for the user to tap on a
-          horizontal surface before placing the model.
+        <!--
+            - We REMOVED `ar-placement="floor"`.
+            - We added `scale="1 1 1"` to enforce real-world scale.
+            - We will now manually place the object using JavaScript for stability.
         -->
         <model-viewer
             id="machine-viewer"
@@ -151,12 +172,13 @@
             ios-src=""
             crossorigin="anonymous"
             ar
-            ar-placement="floor"
             ar-modes="webxr scene-viewer quick-look"
             ar-scale="fixed"
+            scale="1 1 1"
             camera-controls
             touch-action="pan-y"
             alt="A 3D model of a machine"
+            disable-reticle
         >
             <button slot="ar-button" id="ar-button">
                 View in your space
@@ -167,8 +189,8 @@
                 <p>Loading 3D Viewer...</p>
             </div>
         </model-viewer>
-
-        <!-- The new instructions overlay -->
+        
+        <div id="placement-marker"></div>
         <div id="ar-instructions"></div>
         
         <div id="error-message" style="display: none;"></div>
@@ -178,10 +200,11 @@
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.getElementById('machine-viewer');
             const arInstructions = document.getElementById('ar-instructions');
+            const placementMarker = document.getElementById('placement-marker');
             const errorMessage = document.getElementById('error-message');
 
-            let instructionTimeout;
             let isModelPlaced = false;
+            let lastHitResult = null; // Store the latest hit test result
 
             const getQueryParam = (name) => {
                 const params = new URLSearchParams(window.location.search);
@@ -207,31 +230,59 @@
             modelViewer.addEventListener('ar-status', (event) => {
                 if (event.detail.status === 'session-started') {
                     isModelPlaced = false;
-                    // Updated instructions to be more descriptive
-                    arInstructions.textContent = 'Point your camera at the floor to find a surface.';
+                    lastHitResult = null;
+                    arInstructions.textContent = 'Move your phone to find a surface';
                     arInstructions.classList.add('visible');
-                    
-                    // After a delay, prompt the user to place the object using the reticle
-                    clearTimeout(instructionTimeout);
-                    instructionTimeout = setTimeout(() => {
-                        // This tells the user what the placement indicator looks like.
-                        arInstructions.textContent = 'Tap the white ring to place the object';
-                    }, 3000);
-
+                    placementMarker.classList.remove('visible');
                 } else if (event.detail.status === 'not-presenting') {
-                    // Hide instructions when exiting AR
                     arInstructions.classList.remove('visible');
+                    placementMarker.classList.remove('visible');
                 }
             });
 
+            // --- Placement Marker Logic ---
+            const onUpdate = (event) => {
+                if(modelViewer.arStatus !== 'session-started' || isModelPlaced) {
+                    placementMarker.classList.remove('visible');
+                    lastHitResult = null;
+                    return;
+                }
+
+                // Perform a hit test to find a surface
+                const hitTest = modelViewer.arHitTest(event.clientX, event.clientY);
+                if (hitTest && hitTest.length > 0) {
+                    lastHitResult = hitTest[0]; // Store the first valid hit
+                    placementMarker.classList.add('visible');
+                    arInstructions.textContent = 'Tap to place object';
+                } else {
+                    lastHitResult = null;
+                    placementMarker.classList.remove('visible');
+                    arInstructions.textContent = 'Move your phone to find a surface';
+                }
+            };
+            // Use 'mousemove' for desktop and 'touchmove' for mobile to update marker
+            modelViewer.addEventListener('mousemove', onUpdate);
+            modelViewer.addEventListener('touchmove', onUpdate);
+
+
             // --- Placement Logic ---
-            // This event fires when the user taps the screen in AR mode.
-            modelViewer.addEventListener('click', (event) => {
-                // We only want to hide the instructions once the model has been placed.
-                if (!isModelPlaced && modelViewer.arStatus === 'session-started') {
+            modelViewer.addEventListener('click', async (event) => {
+                if (isModelPlaced || !lastHitResult) {
+                    return;
+                }
+                
+                try {
+                    // Manually place the model at the last known hit result position
+                    await modelViewer.placeAt(lastHitResult);
                     isModelPlaced = true;
-                    // Hide the "Tap to place" message after the first successful tap.
+                    // Hide UI elements after placing the object
                     arInstructions.classList.remove('visible');
+                    placementMarker.classList.remove('visible');
+                } catch (error) {
+                    console.error("Failed to place model:", error);
+                    errorMessage.textContent = "Could not place the object. Please try again.";
+                    errorMessage.style.display = 'block';
+                    setTimeout(() => errorMessage.style.display = 'none', 3000);
                 }
             });
             
