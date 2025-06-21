@@ -57,6 +57,13 @@
             font-weight: 700;
             padding: 15px 30px;
             box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #ar-button:hover {
+            background-color: #0066d6;
+            box-shadow: 0 6px 16px rgba(0, 122, 255, 0.5);
         }
 
         #loading-overlay {
@@ -119,26 +126,50 @@
             opacity: 1;
         }
 
+        /* Updated dimensions overlay for better visibility */
         #dimensions-overlay {
             position: absolute;
             top: 20px;
-            left: 20px;
-            background-color: rgba(0, 0, 0, 0.6);
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.8);
             color: white;
-            border-radius: 8px;
-            padding: 10px;
-            font-size: 14px;
-            font-weight: 500;
+            border-radius: 12px;
+            padding: 15px 20px;
+            font-size: 16px;
+            font-weight: 600;
             z-index: 5;
             display: none;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
         }
 
         #dimensions-overlay.visible {
             display: block;
         }
 
+        #dimensions-overlay h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #fff;
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            padding-bottom: 8px;
+        }
+
         #dimensions-overlay div {
-            margin-bottom: 5px;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #dimensions-overlay .label {
+            color: #bbb;
+            margin-right: 15px;
+        }
+
+        #dimensions-overlay .value {
+            color: #fff;
+            font-weight: 700;
         }
 
         #error-message {
@@ -156,6 +187,26 @@
             border: 1px solid #d32f2f;
             border-radius: 8px;
             z-index: 20;
+        }
+
+        /* Debug info panel */
+        #debug-info {
+            position: absolute;
+            bottom: 100px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            max-width: 300px;
+            z-index: 10;
+        }
+
+        #debug-info.visible {
+            display: block;
         }
 
     </style>
@@ -192,8 +243,23 @@
         </model-viewer>
         
         <div id="ar-instructions"></div>
-        <div id="dimensions-overlay"></div>
+        <div id="dimensions-overlay">
+            <h3>Dimensions</h3>
+            <div>
+                <span class="label">Length:</span>
+                <span class="value" id="dim-length">-</span>
+            </div>
+            <div>
+                <span class="label">Breadth:</span>
+                <span class="value" id="dim-breadth">-</span>
+            </div>
+            <div>
+                <span class="label">Height:</span>
+                <span class="value" id="dim-height">-</span>
+            </div>
+        </div>
         <div id="error-message" style="display: none;"></div>
+        <div id="debug-info"></div>
     </div>
 
     <script>
@@ -202,10 +268,24 @@
             const arInstructions = document.getElementById('ar-instructions');
             const dimensionsOverlay = document.getElementById('dimensions-overlay');
             const errorMessage = document.getElementById('error-message');
+            const debugInfo = document.getElementById('debug-info');
             
             let modelDimensions = null;
             let originalScale = null;
             let placementCount = 0;
+
+            // Enable debug mode with ?debug=true
+            const urlParams = new URLSearchParams(window.location.search);
+            const debugMode = urlParams.get('debug') === 'true';
+            if (debugMode) {
+                debugInfo.classList.add('visible');
+            }
+
+            const updateDebugInfo = (info) => {
+                if (debugMode) {
+                    debugInfo.innerHTML = info;
+                }
+            };
 
             const getQueryParam = (name) => {
                 const params = new URLSearchParams(window.location.search);
@@ -224,13 +304,25 @@
 
             modelViewer.src = glbModelUrl;
 
-            // Detect if iOS
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+            // Detect platform
+            const userAgent = navigator.userAgent.toLowerCase();
+            const isIOS = /ipad|iphone|ipod/.test(userAgent) && !window.MSStream;
+            const isAndroid = /android/.test(userAgent);
+            const platform = isIOS ? 'iOS' : (isAndroid ? 'Android' : 'Other');
+            
+            // Update dimensions display
+            const updateDimensionsDisplay = (scale = 1) => {
+                if (modelDimensions) {
+                    document.getElementById('dim-length').textContent = `${(modelDimensions.depth * scale * 100).toFixed(1)} cm`;
+                    document.getElementById('dim-breadth').textContent = `${(modelDimensions.width * scale * 100).toFixed(1)} cm`;
+                    document.getElementById('dim-height').textContent = `${(modelDimensions.height * scale * 100).toFixed(1)} cm`;
+                    dimensionsOverlay.classList.add('visible');
+                }
+            };
             
             // When the model is loaded, get its dimensions and set appropriate scale
             modelViewer.addEventListener('load', () => {
                 try {
-                    const center = modelViewer.getCenter();
                     const size = modelViewer.getDimensions();
                     modelDimensions = {
                         width: size.x,
@@ -254,7 +346,7 @@
                     if (isIOS) {
                         // iOS tends to render larger, so reduce scale
                         targetScale *= 0.6;
-                    } else {
+                    } else if (isAndroid) {
                         // Android tends to render smaller, so increase scale
                         targetScale *= 1.2;
                     }
@@ -262,23 +354,47 @@
                     originalScale = targetScale;
                     modelViewer.scale = `${targetScale} ${targetScale} ${targetScale}`;
                     
-                    console.log('Model dimensions (meters):', modelDimensions);
-                    console.log('Applied scale:', targetScale);
-                    console.log('Platform:', isIOS ? 'iOS' : 'Android/Other');
+                    // Show dimensions in preview mode
+                    updateDimensionsDisplay(targetScale);
+                    
+                    // Debug information
+                    const debugText = `
+Platform: ${platform}<br>
+Model dimensions (m):<br>
+- Width: ${size.x.toFixed(3)}<br>
+- Height: ${size.y.toFixed(3)}<br>
+- Depth: ${size.z.toFixed(3)}<br>
+Max dimension: ${maxDimension.toFixed(3)}m<br>
+Applied scale: ${targetScale.toFixed(3)}<br>
+Final size (cm):<br>
+- Width: ${(size.x * targetScale * 100).toFixed(1)}<br>
+- Height: ${(size.y * targetScale * 100).toFixed(1)}<br>
+- Depth: ${(size.z * targetScale * 100).toFixed(1)}
+                    `;
+                    updateDebugInfo(debugText);
+                    
+                    console.log('Model loaded:', {
+                        dimensions: modelDimensions,
+                        scale: targetScale,
+                        platform: platform
+                    });
                     
                 } catch (e) {
                     console.error("Could not get model dimensions:", e);
+                    errorMessage.textContent = "Warning: Could not calculate model dimensions";
+                    errorMessage.style.display = 'block';
                 }
             });
 
             // AR Session Logic
             modelViewer.addEventListener('ar-status', (event) => {
-                dimensionsOverlay.classList.remove('visible');
-
                 if (event.detail.status === 'session-started') {
                     // Disable 3D controls when entering AR
                     modelViewer.removeAttribute('camera-controls');
                     modelViewer.removeAttribute('auto-rotate');
+                    
+                    // Hide dimensions overlay in AR mode initially
+                    dimensionsOverlay.classList.remove('visible');
                     
                     // Reset placement status
                     modelViewer.removeAttribute('data-placed');
@@ -299,6 +415,8 @@
                         }
                         
                         modelViewer.scale = `${arScale} ${arScale} ${arScale}`;
+                        
+                        updateDebugInfo(`AR Mode Active<br>Platform: ${platform}<br>AR Scale: ${arScale.toFixed(3)}`);
                     }
                     
                 } else if (event.detail.status === 'not-presenting') {
@@ -307,9 +425,10 @@
                     modelViewer.setAttribute('auto-rotate', '');
                     arInstructions.classList.remove('visible');
                     
-                    // Reset to original scale
+                    // Reset to original scale and show dimensions
                     if (originalScale) {
                         modelViewer.scale = `${originalScale} ${originalScale} ${originalScale}`;
+                        updateDimensionsDisplay(originalScale);
                     }
                 }
             });
@@ -341,21 +460,14 @@
                     // Update instructions
                     arInstructions.textContent = 'Model placed! Move around to view from different angles';
                     
+                    // Show dimensions after placement
+                    const currentScale = parseFloat(modelViewer.scale.split(' ')[0]) || 1;
+                    updateDimensionsDisplay(currentScale);
+                    
                     // Hide instructions after a delay
                     setTimeout(() => {
                         arInstructions.classList.remove('visible');
-                        
-                        // Show dimensions
-                        if (modelDimensions) {
-                            const scale = parseFloat(modelViewer.scale.split(' ')[0]) || 1;
-                            dimensionsOverlay.innerHTML = `
-                                <div>Length: ${(modelDimensions.depth * scale * 100).toFixed(1)} cm</div>
-                                <div>Breadth: ${(modelDimensions.width * scale * 100).toFixed(1)} cm</div>
-                                <div>Height: ${(modelDimensions.height * scale * 100).toFixed(1)} cm</div>
-                            `;
-                            dimensionsOverlay.classList.add('visible');
-                        }
-                    }, 2000);
+                    }, 3000);
                     
                 }, 100);
             });
@@ -371,7 +483,7 @@
             // Scene viewer specific handling for Android
             modelViewer.addEventListener('scene-viewer-ready', () => {
                 console.log('Scene Viewer is ready');
-                // Scene Viewer (Android) automatically handles floor placement
+                updateDebugInfo('Scene Viewer Ready (Android)');
             });
         });
     </script>
