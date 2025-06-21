@@ -77,7 +77,7 @@
         <h1>Enter 3D Model URL</h1>
         <form id="modelUrlForm">
             <label for="modelUrlInput">GLB Model URL:</label>
-            <input type="text" id="modelUrlInput" placeholder="e.g., https://example.com/model.glb" required>
+            <input type="text" id="modelUrlInput" placeholder="e.g., https://example.com/model.glb or a pre-signed URL" required>
             <button type="submit">View AR Model</button>
             <div id="formErrorMessage" class="error-message" style="display: none;"></div>
         </form>
@@ -90,19 +90,20 @@
             const modelUrl = document.getElementById('modelUrlInput').value;
             const formErrorMessage = document.getElementById('formErrorMessage');
 
+            // Clear previous error messages
+            formErrorMessage.style.display = 'none';
+            formErrorMessage.textContent = '';
+
             if (!modelUrl) {
-                formErrorMessage.textContent = "Please enter a valid GLB model URL.";
+                formErrorMessage.textContent = "Please enter a model URL.";
                 formErrorMessage.style.display = 'block';
                 return;
             }
 
-            // Simple validation for .glb extension
-            if (!modelUrl.toLowerCase().endsWith('.glb')) {
-                formErrorMessage.textContent = "URL must end with '.glb'.";
-                formErrorMessage.style.display = 'block';
-                return;
-            }
-
+            // You can add more sophisticated URL validation if needed (e.g., check for http/https, valid domain structure)
+            // But for now, we'll remove the strict '.glb' extension check to allow pre-signed URLs.
+            // If you want to ensure it's a GLB, you might rely on the server's Content-Type header or assume the user provides correct GLB URLs.
+            
             // Construct the new URL with the modelUrl as a query parameter
             const currentDomain = window.location.origin; // Gets "http://localhost:8080" or "https://yourdomain.com"
             const redirectUrl = `${currentDomain}/index.html?modelUrl=${encodeURIComponent(modelUrl)}`;
