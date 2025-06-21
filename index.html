@@ -34,8 +34,17 @@
             width: 100%;
             height: 100%;
             --poster-color: #f0f2f5;
+            /* Style the default placement ring to be more prominent */
+            --ar-tracking-reticle-color1: rgba(255, 255, 255, 0.8);
+            --ar-tracking-reticle-color2: white;
         }
         
+        /* This is the key to our new approach. By default, the model's content
+           is invisible, but only when it's in AR mode and hasn't been placed yet. */
+        model-viewer[ar-status="session-started"]:not([data-placed]) .model-viewer-render-canvas {
+            opacity: 0;
+        }
+
         #ar-button {
             background-color: #007aff;
             border-radius: 30px;
@@ -64,7 +73,6 @@
             align-items: center;
             z-index: 10;
             text-align: center;
-            transition: opacity 0.3s ease;
         }
         
         .spinner {
@@ -110,33 +118,6 @@
         #ar-instructions.visible {
             opacity: 1;
         }
-        
-        #placement-marker {
-            position: absolute;
-            width: 150px;
-            height: 150px;
-            border: 4px solid white;
-            border-radius: 8px;
-            background-color: rgba(255, 255, 255, 0.2);
-            display: none;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
-            /* Make sure the marker is transformed correctly */
-            transform: translate(-50%, -50%);
-        }
-        
-        #placement-marker.visible {
-            display: flex;
-        }
-        
-        #placement-marker::before {
-            content: '';
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background-color: white;
-        }
 
         #error-message {
             position: absolute;
@@ -162,9 +143,9 @@
     <div id="ar-container">
         
         <!--
-            - We REMOVED `ar-placement="floor"`.
-            - We added `scale="1 1 1"` to enforce real-world scale.
-            - We will now manually place the object using JavaScript for stability.
+            - We added `shadow-intensity="1"` to enable real-time shadows.
+            - We added `auto-rotate` to help the viewer calculate the model's bounds.
+            - The rest of the stable placement logic remains.
         -->
         <model-viewer
             id="machine-viewer"
@@ -172,13 +153,15 @@
             ios-src=""
             crossorigin="anonymous"
             ar
+            ar-placement="floor"
             ar-modes="webxr scene-viewer quick-look"
             ar-scale="fixed"
             scale="1 1 1"
             camera-controls
+            auto-rotate
+            shadow-intensity="1"
             touch-action="pan-y"
             alt="A 3D model of a machine"
-            disable-reticle
         >
             <button slot="ar-button" id="ar-button">
                 View in your space
@@ -190,7 +173,6 @@
             </div>
         </model-viewer>
         
-        <div id="placement-marker"></div>
         <div id="ar-instructions"></div>
         
         <div id="error-message" style="display: none;"></div>
@@ -200,11 +182,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.getElementById('machine-viewer');
             const arInstructions = document.getElementById('ar-instructions');
-            const placementMarker = document.getElementById('placement-marker');
             const errorMessage = document.getElementById('error-message');
-
-            let isModelPlaced = false;
-            let lastHitResult = null; // Store the latest hit test result
 
             const getQueryParam = (name) => {
                 const params = new URLSearchParams(window.location.search);
@@ -229,61 +207,33 @@
             // --- AR Session Logic ---
             modelViewer.addEventListener('ar-status', (event) => {
                 if (event.detail.status === 'session-started') {
-                    isModelPlaced = false;
-                    lastHitResult = null;
-                    arInstructions.textContent = 'Move your phone to find a surface';
+                    // Reset placement status when a new session starts
+                    modelViewer.removeAttribute('data-placed');
+                    
+                    arInstructions.textContent = 'Move your phone around to find a flat surface on the floor';
                     arInstructions.classList.add('visible');
-                    placementMarker.classList.remove('visible');
+                    
+                    // The default reticle will now show automatically on the floor.
                 } else if (event.detail.status === 'not-presenting') {
                     arInstructions.classList.remove('visible');
-                    placementMarker.classList.remove('visible');
                 }
             });
 
-            // --- Placement Marker Logic ---
-            const onUpdate = (event) => {
-                if(modelViewer.arStatus !== 'session-started' || isModelPlaced) {
-                    placementMarker.classList.remove('visible');
-                    lastHitResult = null;
-                    return;
-                }
-
-                // Perform a hit test to find a surface
-                const hitTest = modelViewer.arHitTest(event.clientX, event.clientY);
-                if (hitTest && hitTest.length > 0) {
-                    lastHitResult = hitTest[0]; // Store the first valid hit
-                    placementMarker.classList.add('visible');
-                    arInstructions.textContent = 'Tap to place object';
-                } else {
-                    lastHitResult = null;
-                    placementMarker.classList.remove('visible');
-                    arInstructions.textContent = 'Move your phone to find a surface';
-                }
-            };
-            // Use 'mousemove' for desktop and 'touchmove' for mobile to update marker
-            modelViewer.addEventListener('mousemove', onUpdate);
-            modelViewer.addEventListener('touchmove', onUpdate);
-
-
             // --- Placement Logic ---
-            modelViewer.addEventListener('click', async (event) => {
-                if (isModelPlaced || !lastHitResult) {
+            modelViewer.addEventListener('click', (event) => {
+                // Check if we are in an active AR session and the click was on the model-viewer itself
+                if (modelViewer.arStatus !== 'session-started' || modelViewer.hasAttribute('data-placed')) {
                     return;
                 }
                 
-                try {
-                    // Manually place the model at the last known hit result position
-                    await modelViewer.placeAt(lastHitResult);
-                    isModelPlaced = true;
-                    // Hide UI elements after placing the object
+                // The `ar-placement="floor"` attribute handles the actual placement.
+                // This click listener is just for managing our UI.
+                
+                // We use a small timeout to ensure the model has time to anchor before we hide the UI.
+                setTimeout(() => {
+                    modelViewer.setAttribute('data-placed', 'true');
                     arInstructions.classList.remove('visible');
-                    placementMarker.classList.remove('visible');
-                } catch (error) {
-                    console.error("Failed to place model:", error);
-                    errorMessage.textContent = "Could not place the object. Please try again.";
-                    errorMessage.style.display = 'block';
-                    setTimeout(() => errorMessage.style.display = 'none', 3000);
-                }
+                }, 100);
             });
             
             modelViewer.addEventListener('error', (event) => {
