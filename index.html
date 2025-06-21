@@ -166,9 +166,8 @@
     <div id="ar-container">
         
         <!--
-            - I have REMOVED `disable-zoom` to allow you to test scaling.
-            - `camera-orbit="auto"` helps normalize the initial view.
-            - `scale="1 1 1"` is kept to explicitly request real-world scale.
+            - We added `shadow-intensity="1"` to enable real-time shadows.
+            - We will dynamically manage `camera-controls` and `auto-rotate`.
         -->
         <model-viewer
             id="machine-viewer"
@@ -180,7 +179,6 @@
             ar-scale="fixed"
             scale="1 1 1"
             camera-controls
-            camera-orbit="auto"
             auto-rotate
             shadow-intensity="1"
             touch-action="pan-y"
