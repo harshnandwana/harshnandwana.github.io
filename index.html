@@ -119,6 +119,29 @@
             opacity: 1;
         }
 
+        /* This is the new overlay for displaying the dimensions */
+        #dimensions-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.6);
+            color: white;
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 5;
+            display: none; /* Hidden by default */
+        }
+
+        #dimensions-overlay.visible {
+            display: block;
+        }
+
+        #dimensions-overlay div {
+            margin-bottom: 5px;
+        }
+
         #error-message {
             position: absolute;
             top: 20px;
@@ -172,7 +195,7 @@
         </model-viewer>
         
         <div id="ar-instructions"></div>
-        
+        <div id="dimensions-overlay"></div>
         <div id="error-message" style="display: none;"></div>
     </div>
 
@@ -180,7 +203,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.getElementById('machine-viewer');
             const arInstructions = document.getElementById('ar-instructions');
+            const dimensionsOverlay = document.getElementById('dimensions-overlay');
             const errorMessage = document.getElementById('error-message');
+            
+            let modelDimensions = null;
 
             const getQueryParam = (name) => {
                 const params = new URLSearchParams(window.location.search);
@@ -199,8 +225,27 @@
 
             modelViewer.src = glbModelUrl;
 
+            // When the model is loaded, get its dimensions
+            modelViewer.addEventListener('load', () => {
+                try {
+                    const center = modelViewer.getCenter();
+                    const size = modelViewer.getDimensions();
+                    modelDimensions = {
+                        width: size.x, // Breadth
+                        height: size.y,
+                        depth: size.z, // Length
+                    };
+                    console.log('Model dimensions loaded (meters):', modelDimensions);
+                } catch (e) {
+                    console.error("Could not get model dimensions:", e);
+                }
+            });
+
             // --- AR Session Logic ---
             modelViewer.addEventListener('ar-status', (event) => {
+                // Hide dimensions when not in AR or when session restarts
+                dimensionsOverlay.classList.remove('visible');
+
                 if (event.detail.status === 'session-started') {
                     // Disable 3D controls when entering AR for a cleaner experience
                     modelViewer.removeAttribute('camera-controls');
@@ -226,13 +271,21 @@
                     return;
                 }
                 
-                // The `ar-placement="floor"` attribute handles the actual placement.
-                // This click listener is just for managing our UI.
-                
                 // We use a small timeout to ensure the model has time to anchor before we hide the UI.
                 setTimeout(() => {
                     modelViewer.setAttribute('data-placed', 'true');
                     arInstructions.classList.remove('visible');
+                    
+                    // Now, show the dimensions
+                    if (modelDimensions) {
+                        dimensionsOverlay.innerHTML = `
+                            <div>Length: ${(modelDimensions.depth * 100).toFixed(1)} cm</div>
+                            <div>Breadth: ${(modelDimensions.width * 100).toFixed(1)} cm</div>
+                            <div>Height: ${(modelDimensions.height * 100).toFixed(1)} cm</div>
+                        `;
+                        dimensionsOverlay.classList.add('visible');
+                    }
+
                 }, 100);
             });
             
