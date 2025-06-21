@@ -34,12 +34,10 @@
             width: 100%;
             height: 100%;
             --poster-color: #f0f2f5;
+            /* This custom property styles the default placement ring (reticle) */
+            --ar-tracking-reticle-color: white; 
         }
         
-        /*
-          This styles the built-in AR button from <model-viewer>.
-          We are making it large and clear, so it's the main focus.
-        */
         #ar-button {
             background-color: #007aff;
             border-radius: 30px;
@@ -55,10 +53,6 @@
             box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
         }
 
-        /*
-          Loading indicator shown while the model downloads.
-          We are keeping our custom text for a better user experience.
-        */
         #loading-overlay {
             position: absolute;
             top: 0;
@@ -75,11 +69,6 @@
             transition: opacity 0.3s ease;
         }
         
-        #loading-overlay.hidden {
-            opacity: 0;
-            pointer-events: none;
-        }
-
         .spinner {
             border: 4px solid rgba(0, 0, 0, 0.2);
             border-radius: 50%;
@@ -100,7 +89,33 @@
             font-weight: 500;
             color: #333;
         }
+        
+        /*
+          This new overlay provides instructions during the AR session.
+          It's styled to look like the "Tap to place" button from your images.
+        */
+        #ar-instructions {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: white;
+            color: black;
+            padding: 15px 30px;
+            border-radius: 30px;
+            font-size: 18px;
+            font-weight: 700;
+            text-align: center;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
 
+        #ar-instructions.visible {
+            opacity: 1;
+        }
 
         #error-message {
             position: absolute;
@@ -126,9 +141,9 @@
     <div id="ar-container">
         
         <!-- 
-          The <model-viewer> element now contains its own AR button.
-          The `ar-status="not-presenting"` part of the slot name ensures
-          the button is only shown when not in AR mode.
+          The key change here is ar-placement="floor".
+          This tells model-viewer to wait for the user to tap on a
+          horizontal surface before placing the model.
         -->
         <model-viewer
             id="machine-viewer"
@@ -136,6 +151,7 @@
             ios-src=""
             crossorigin="anonymous"
             ar
+            ar-placement="floor"
             ar-modes="webxr scene-viewer quick-look"
             ar-scale="fixed"
             camera-controls
@@ -152,14 +168,20 @@
             </div>
         </model-viewer>
 
+        <!-- The new instructions overlay -->
+        <div id="ar-instructions"></div>
+        
         <div id="error-message" style="display: none;"></div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const modelViewer = document.getElementById('machine-viewer');
-            const loadingOverlay = document.getElementById('loading-overlay');
+            const arInstructions = document.getElementById('ar-instructions');
             const errorMessage = document.getElementById('error-message');
+
+            let instructionTimeout;
+            let isModelPlaced = false;
 
             const getQueryParam = (name) => {
                 const params = new URLSearchParams(window.location.search);
@@ -168,10 +190,9 @@
 
             const glbModelUrl = getQueryParam('modelUrl');
             const usdzModelUrl = getQueryParam('iosModelUrl');
-            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
+            
             if (!glbModelUrl) {
-                loadingOverlay.style.display = 'none';
+                document.getElementById('loading-overlay').style.display = 'none';
                 errorMessage.textContent = "Error: A 'modelUrl' parameter is required.";
                 errorMessage.style.display = 'block';
                 return;
@@ -180,22 +201,46 @@
             modelViewer.src = glbModelUrl;
             if (usdzModelUrl) {
                 modelViewer.iosSrc = usdzModelUrl;
-            } else if (isIOS) {
-                console.warn("No 'iosModelUrl' provided. AR on iOS works best with a .usdz file.");
             }
-            
-            modelViewer.addEventListener('load', () => {
-                 // The built-in poster will automatically hide on load.
-                 console.log('Model loaded.');
+
+            // --- AR Session Logic ---
+            modelViewer.addEventListener('ar-status', (event) => {
+                if (event.detail.status === 'session-started') {
+                    isModelPlaced = false;
+                    // Updated instructions to be more descriptive
+                    arInstructions.textContent = 'Point your camera at the floor to find a surface.';
+                    arInstructions.classList.add('visible');
+                    
+                    // After a delay, prompt the user to place the object using the reticle
+                    clearTimeout(instructionTimeout);
+                    instructionTimeout = setTimeout(() => {
+                        // This tells the user what the placement indicator looks like.
+                        arInstructions.textContent = 'Tap the white ring to place the object';
+                    }, 3000);
+
+                } else if (event.detail.status === 'not-presenting') {
+                    // Hide instructions when exiting AR
+                    arInstructions.classList.remove('visible');
+                }
             });
 
+            // --- Placement Logic ---
+            // This event fires when the user taps the screen in AR mode.
+            modelViewer.addEventListener('click', (event) => {
+                // We only want to hide the instructions once the model has been placed.
+                if (!isModelPlaced && modelViewer.arStatus === 'session-started') {
+                    isModelPlaced = true;
+                    // Hide the "Tap to place" message after the first successful tap.
+                    arInstructions.classList.remove('visible');
+                }
+            });
+            
             modelViewer.addEventListener('error', (event) => {
-                loadingOverlay.style.display = 'none';
+                document.getElementById('loading-overlay').style.display = 'none';
                 errorMessage.textContent = `Error: Failed to load 3D model. Check URL, CORS settings, and ensure you are online.`;
                 errorMessage.style.display = 'block';
                 console.error('Model loading error:', event.detail);
             });
-
         });
     </script>
 
