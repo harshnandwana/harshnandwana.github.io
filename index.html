@@ -46,7 +46,7 @@
         <div class="text-center p-8 max-w-md">
             <h1 class="text-3xl font-bold text-white mb-4">Web AR Viewer</h1>
             <p class="text-gray-400 mb-8">Enter the URL of a .GLB or .GLTF model to view it in Augmented Reality.</p>
-            <input id="model-url-input" type="url" placeholder="Enter model URL" class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" value="https://storage.googleapis.com/xrand/users/beca66b4-73d8-49a4-ac89-e5e3c4a83d4e/models/1708330e-bc39-4c95-9934-6b0842053a6c.glb?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=storage-admin%40total-now-441210-u5.iam.gserviceaccount.com%2F20250621%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20250621T171055Z&X-Goog-Expires=3600&X-Goog-SignedHeaders=host&X-Goog-Signature=0a89634a9029e2695e9a64d94a1682eb51f481e765ce71c2b06f8a5ceb40d28c68705d3d6cb3349f6a2e864e522256a0af52e5e0cdb0fe0841ae782543349332202dc9b1da6e6043c544197c2bade6c7ccb05206c18d02588791359e6fcc0c2793179764cf915c844c46df8498b75f262229288d420954ed5ae6c0fa8a6653e7d304a08a369357ec01f51653172e50b67cd0e776d1454458bd6890b815e4c158c05567fe03caafdfa891cdc24e82ddd6438e1ff5455db80f0a1fb4dc7be361317313ffebaae662497e6160920c3e3a4dfb77f6ffaeeda2b1ff314dc47d27b48b6ed29d943513ae3b26919b5ba7db970e8f1c4288abadd640e4ba30d0f9f5e0e1">
+            <input id="model-url-input" type="url" placeholder="Enter model URL" class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" value="https://cdn.glitch.global/e5fe7f62-2c6c-4f1c-9243-851421b34a04/robot_playground.glb?v=1718991730419">
             <button id="start-ar-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">Start AR Session</button>
         </div>
     </div>
@@ -58,10 +58,8 @@
         renderer="antialias: true; alpha: true"
         gesture-detector
     >
-        <a-assets>
-            <!-- Model will be loaded dynamically -->
-            <a-asset-item id="machine-model" src=""></a-asset-item>
-        </a-assets>
+        <!-- a-assets are not used for the dynamic model anymore -->
+        <a-assets></a-assets>
 
         <!-- AR Camera and Cursor -->
         <a-camera gps-new-camera='gpsMinDistance: 5' look-controls="enabled: false" arjs-look-controls='smoothingFactor: 0.1'></a-camera>
@@ -73,7 +71,8 @@
             scale="0.05 0.05 0.05" 
             rotation="0 0 0"
         >
-            <a-gltf-model id="model" src="#machine-model" position="0 0 0"></a-gltf-model>
+            <!-- The src attribute will be set dynamically by our script -->
+            <a-gltf-model id="model" src="" position="0 0 0"></a-gltf-model>
             
             <!-- Measurement visualizations, initially hidden -->
             <a-entity id="measurements" visible="false">
@@ -148,7 +147,6 @@
 
             // A-Frame elements
             const sceneEl = document.querySelector('#ar-scene');
-            const modelAsset = document.getElementById('machine-model');
             const modelEl = document.getElementById('model');
             const modelContainer = document.getElementById('model-container');
             const measurements = document.getElementById('measurements');
@@ -193,9 +191,10 @@
             });
 
             // Listen for model loading errors
-            modelEl.addEventListener('model-error', () => {
+            modelEl.addEventListener('model-error', (e) => {
                 statusText.textContent = 'Error: Could not load model.';
                 loader.style.display = 'none';
+                console.error("Model Error:", e.detail);
             });
             
             sceneEl.addEventListener('ar-ready', () => {
@@ -203,6 +202,7 @@
             });
             
             sceneEl.addEventListener('ar-hit-test-start', () => {
+                if (!isModelDownloaded) return; // Don't detect ground until model is ready
                 if (!isGroundDetected) {
                     isGroundDetected = true;
                     reticle.setAttribute('visible', true);
@@ -234,8 +234,8 @@
                 
                 initializeAR();
 
-                // Set model source to trigger the actual download
-                modelAsset.setAttribute('src', modelUrl);
+                // Set model source directly on the gltf-model component to trigger the download
+                modelEl.setAttribute('gltf-model', `url(${modelUrl})`);
 
                 // Hide start screen and show AR UI
                 startScreen.style.display = 'none';
@@ -269,7 +269,7 @@
                 resetScene();
                 initializeAR();
                 // Re-trigger download
-                modelAsset.setAttribute('src', modelUrlInput.value);
+                modelEl.setAttribute('gltf-model', `url(${modelUrlInput.value})`);
             });
 
             backButton.addEventListener('click', () => {
@@ -277,6 +277,8 @@
                 uiOverlay.classList.remove('flex');
                 startScreen.style.display = 'flex';
                 resetScene();
+                // Clear the model src to stop any loading
+                modelEl.setAttribute('gltf-model', '');
             });
 
             measureButton.addEventListener('click', () => {
