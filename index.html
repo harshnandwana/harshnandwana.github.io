@@ -166,8 +166,9 @@
     <div id="ar-container">
         
         <!--
-            - We added `shadow-intensity="1"` to enable real-time shadows.
-            - We will dynamically manage `camera-controls` and `auto-rotate`.
+            - We added `disable-zoom` to prevent the 3D view's scale from affecting AR.
+            - `camera-orbit="auto"` helps normalize the initial view.
+            - `scale="1 1 1"` is kept to explicitly request real-world scale.
         -->
         <model-viewer
             id="machine-viewer"
@@ -179,6 +180,8 @@
             ar-scale="fixed"
             scale="1 1 1"
             camera-controls
+            camera-orbit="auto"
+            disable-zoom
             auto-rotate
             shadow-intensity="1"
             touch-action="pan-y"
