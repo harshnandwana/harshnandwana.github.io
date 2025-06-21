@@ -46,7 +46,7 @@
         <div class="text-center p-8 max-w-md">
             <h1 class="text-3xl font-bold text-white mb-4">Web AR Viewer</h1>
             <p class="text-gray-400 mb-8">Enter the URL of a .GLB or .GLTF model to view it in Augmented Reality.</p>
-            <input id="model-url-input" type="url" placeholder="Enter model URL" class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" value="https://cdn.glitch.global/e5fe7f62-2c6c-4f1c-9243-851421b34a04/robot_playground.glb?v=1718991730419">
+            <input id="model-url-input" type="url" placeholder="Enter model URL" class="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500" value="https://storage.googleapis.com/xrand/users/beca66b4-73d8-49a4-ac89-e5e3c4a83d4e/models/1708330e-bc39-4c95-9934-6b0842053a6c.glb?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=storage-admin%40total-now-441210-u5.iam.gserviceaccount.com%2F20250621%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20250621T171055Z&X-Goog-Expires=3600&X-Goog-SignedHeaders=host&X-Goog-Signature=0a89634a9029e2695e9a64d94a1682eb51f481e765ce71c2b06f8a5ceb40d28c68705d3d6cb3349f6a2e864e522256a0af52e5e0cdb0fe0841ae782543349332202dc9b1da6e6043c544197c2bade6c7ccb05206c18d02588791359e6fcc0c2793179764cf915c844c46df8498b75f262229288d420954ed5ae6c0fa8a6653e7d304a08a369357ec01f51653172e50b67cd0e776d1454458bd6890b815e4c158c05567fe03caafdfa891cdc24e82ddd6438e1ff5455db80f0a1fb4dc7be361317313ffebaae662497e6160920c3e3a4dfb77f6ffaeeda2b1ff314dc47d27b48b6ed29d943513ae3b26919b5ba7db970e8f1c4288abadd640e4ba30d0f9f5e0e1">
             <button id="start-ar-button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors">Start AR Session</button>
         </div>
     </div>
@@ -149,6 +149,7 @@
             // A-Frame elements
             const sceneEl = document.querySelector('#ar-scene');
             const modelAsset = document.getElementById('machine-model');
+            const modelEl = document.getElementById('model');
             const modelContainer = document.getElementById('model-container');
             const measurements = document.getElementById('measurements');
             const reticle = document.getElementById('reticle');
@@ -156,36 +157,6 @@
             let isModelDownloaded = false;
             let isGroundDetected = false;
             let isModelPlaced = false;
-
-            // --- App Start Logic ---
-            startButton.addEventListener('click', () => {
-                const modelUrl = modelUrlInput.value;
-                if (!modelUrl) {
-                    alert('Please enter a valid model URL.');
-                    return;
-                }
-                
-                // Set model source
-                modelAsset.setAttribute('src', modelUrl);
-
-                // Hide start screen and show AR UI
-                startScreen.style.display = 'none';
-                uiOverlay.classList.remove('hidden');
-                uiOverlay.classList.add('flex');
-                
-                // Initialize AR session
-                initializeAR();
-            });
-
-            function initializeAR() {
-                updateUI();
-                
-                // --- Simulate Model Download ---
-                setTimeout(() => {
-                    isModelDownloaded = true;
-                    updateUI();
-                }, 2500);
-            }
 
             // --- State Update Function ---
             function updateUI() {
@@ -213,11 +184,24 @@
                 }
             }
 
+            // --- Set up event listeners once ---
+            
+            // Listen for the actual model load event
+            modelEl.addEventListener('model-loaded', () => {
+                isModelDownloaded = true;
+                updateUI();
+            });
+
+            // Listen for model loading errors
+            modelEl.addEventListener('model-error', () => {
+                statusText.textContent = 'Error: Could not load model.';
+                loader.style.display = 'none';
+            });
+            
             sceneEl.addEventListener('ar-ready', () => {
                 document.querySelector('.a-canvas').style.display = 'block';
             });
             
-            // --- Ground Detection Logic ---
             sceneEl.addEventListener('ar-hit-test-start', () => {
                 if (!isGroundDetected) {
                     isGroundDetected = true;
@@ -230,14 +214,41 @@
                 const hitPosition = e.detail.position;
                 reticle.setAttribute('position', hitPosition);
             });
+
+            // --- Control Button Logic ---
+
+            function initializeAR() {
+                // Reset states and update UI to show "Downloading..."
+                isModelDownloaded = false;
+                isGroundDetected = false;
+                isModelPlaced = false;
+                updateUI();
+            }
             
-            // --- Button Handlers ---
+            startButton.addEventListener('click', () => {
+                const modelUrl = modelUrlInput.value;
+                if (!modelUrl) {
+                    alert('Please enter a valid model URL.');
+                    return;
+                }
+                
+                initializeAR();
+
+                // Set model source to trigger the actual download
+                modelAsset.setAttribute('src', modelUrl);
+
+                // Hide start screen and show AR UI
+                startScreen.style.display = 'none';
+                uiOverlay.classList.remove('hidden');
+                uiOverlay.classList.add('flex');
+            });
+
             placeButton.addEventListener('click', () => {
                 if(isGroundDetected && !isModelPlaced) {
                     const reticlePosition = reticle.getAttribute('position');
                     modelContainer.setAttribute('position', `${reticlePosition.x} ${reticlePosition.y} ${reticlePosition.z}`);
                     modelContainer.setAttribute('visible', true);
-                    reticle.setAttribute('visible', false); // Hide reticle after placing
+                    reticle.setAttribute('visible', false);
                     isModelPlaced = true;
                     updateUI();
                 }
@@ -252,23 +263,19 @@
                     reticle.setAttribute('visible', true);
                 }
                 isModelPlaced = false;
-                isModelDownloaded = false;
-                isGroundDetected = false;
             }
 
             resetButton.addEventListener('click', () => {
-                // Reset states and UI
                 resetScene();
-                // Re-initialize download simulation
                 initializeAR();
+                // Re-trigger download
+                modelAsset.setAttribute('src', modelUrlInput.value);
             });
 
             backButton.addEventListener('click', () => {
-                // Hide AR UI and show start screen
                 uiOverlay.classList.add('hidden');
                 uiOverlay.classList.remove('flex');
                 startScreen.style.display = 'flex';
-                // Reset all states
                 resetScene();
             });
 
@@ -277,7 +284,6 @@
                 measurements.setAttribute('visible', !isVisible);
                 measureButton.classList.toggle('active');
             });
-
         });
     </script>
 </body>
